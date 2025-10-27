@@ -1,0 +1,24 @@
+[project]
+name = "choose-your-own-adventure"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Sander Altman",email = "saltman424@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "langgraph (>=1.0.1,<2.0.0)",
+    "langchain-ollama (>=1.0.0,<2.0.0)",
+    "restrictedpython (>=8.1,<9.0)"
+]
+
+[tool.poetry]
+packages = [{include = "choose_your_own_adventure", from = "src"}]
+
+[tool.poetry.scripts]
+start = "choose_your_own_adventure:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
