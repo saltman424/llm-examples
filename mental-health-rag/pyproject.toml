@@ -1,0 +1,26 @@
+[project]
+name = "mental-health-rag"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Sander Altman",email = "saltman424@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "langgraph (>=1.0.1,<2.0.0)",
+    "langchain-ollama (>=1.0.0,<2.0.0)",
+    "chromadb (>=1.2.2,<2.0.0)",
+    "pypdf2 (>=3.0.1,<4.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "mental_health_rag", from = "src"}]
+
+[tool.poetry.scripts]
+start = "mental_health_rag:main"
+bootstrap = "mental_health_rag.db.bootstrap:bootstrap"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
