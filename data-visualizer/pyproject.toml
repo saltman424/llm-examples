@@ -1,0 +1,27 @@
+[project]
+name = "data-visualizer"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Sander Altman",email = "saltman424@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "langgraph (>=1.0.1,<2.0.0)",
+    "langchain-ollama (>=1.0.0,<2.0.0)",
+    "restrictedpython (>=8.1,<9.0)",
+    "numpy (>=2.3.4,<3.0.0)",
+    "pandas (>=2.3.3,<3.0.0)",
+    "lxml (>=6.0.2,<7.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "data_visualizer", from = "src"}]
+
+[tool.poetry.scripts]
+start = "data_visualizer:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
