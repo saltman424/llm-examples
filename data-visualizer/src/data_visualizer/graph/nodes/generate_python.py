@@ -1,90 +1,59 @@
-import math
-import sys
-from io import StringIO
-from RestrictedPython import compile_restricted
-from RestrictedPython.Guards import guarded_iter_unpack_sequence, safe_builtins
-from ...helpers import print_divider
+from ...helpers import extract_code, extract_info
 from ...llm import llm
 from ...state import State
 from .node import Node
 
-class Summarize(Node):
+class GeneratePython(Node):
   def __call__(self, state: State) -> State:
-    """Determines which answer is the best, if any of them."""
+    """Generates Python code to analyze the data."""
     file_path = state["file_path"]
-    data = state["data"]
     prompt = state["prompt"]
-    prompt = f"""You are a seasoned data analyst and Python developer helping prepare a report on a given dataset. Your goal is to collect relevant summary statistics from the data for another analyst to use in their report.
+    data = state["data"]
+    fixing_existing_code = "python_error" in state
+    prompt = f"""You are a seasoned data analyst and Python developer helping prepare a report on a given dataset. Your goal is to collect all possible relevant summary statistics from the data for the presentation team to put in their report.{" You have previously tried to write Python code to accomplish this, but ended up encountering an error. You must now produce new code to either fix the error or try a new approach that avoids the error." if fixing_existing_code else ""}
 
-You are analyzing: {file_path}.
+## Data
+{file_path}
 
-You 
-    """
-    review = llm.invoke(prompt).content
-    state["summary"] = 
+### Structure
+{extract_info(state)}
+
+### Sample Rows
+{data.head()}
+
+### Basic Statistics
+{data.describe()}
+
+## Original Request
+{prompt}"""
+    if fixing_existing_code:
+      python = state["python"]
+      python_error = state["python_error"]
+      prompt += f"""
+
+## Previous Code
+```python
+{python}
+```
+
+## Error
+{python_error}"""
+    prompt += f"""
+
+## Expected Output
+Explain your thinking on what analysis needs to be done and then produce the Python code to achieve that analysis in a Python code block. This Python code should contain NO IMPORTS. Pandas (pd), Numpy (np), and the built-in Math library (math) have already been imported. No other libraries are available to you. A 'df' variable will already exist, and it will contain the DataFrame described above. You should create a 'result' variable which should contain your summary of the data. You can do whatever you need to with this variable to produce a useful summarization of the data. Just make sure it ends up as a string.
+
+When creating the results, make sure to include logic to effectively handle the data. For example, you should try to handle NaN values, round numbers to a reasonable number of decimals, etc. You want a robust script to produce useful results.
+
+NEVER print anything. The results will automatically get picked up. I repeat: do not include ANY print calls. Just generate the results.
+
+Remember: {"you can simply fix your previous code or try entirely new code. It is up to you. The goal is get a useful summary through Python code that actually works." if fixing_existing_code else "the report is going to be based solely on your results. Make sure to include all potentially relevant summary statistics."}"""
+    # Generating the code
+    print("‣ Generating Python code to analyze the data...")
+    response = llm.invoke(prompt).content
+    state["python"] = extract_code(response, "python")
+    if "python_attempts" in state:
+      state["python_attempts"] += 1
+    else:
+      state["python_attempts"] = 1
     return state
-  
-def execute(code: str) -> str:
-  """
-  Safely execute Python code using RestrictedPython.
-  This prevents dangerous operations like file I/O, network access, imports, etc.
-  """
-  try:
-    # Compile the code with restrictions
-    byte_code = compile_restricted(
-      code,
-      filename='<inline>',
-      mode='exec'
-    )
-    
-    # Set up a safe execution environment
-    safe_locals = {}
-    safe_globals_dict = {
-      '__builtins__': safe_builtins,
-      '_getiter_': guarded_iter_unpack_sequence,
-      '_iter_unpack_sequence_': guarded_iter_unpack_sequence,
-      # Allow safe mathematical operations
-      'math': math,
-      'math': math,
-      'abs': abs,
-      'round': round,
-      'min': min,
-      'max': max,
-      'sum': sum,
-      'len': len,
-      'range': range,
-      'enumerate': enumerate,
-      'zip': zip,
-      'sorted': sorted,
-      'list': list,
-      'dict': dict,
-      'set': set,
-      'tuple': tuple,
-      'str': str,
-      'int': int,
-      'float': float,
-      'bool': bool,
-    }
-
-    # Capture stdout
-    old_stdout = sys.stdout
-    sys.stdout = captured_output = StringIO()
-  
-    try:
-      # Execute the code
-      exec(byte_code, safe_globals_dict, safe_locals)
-
-      # Get the output
-      output = captured_output.getvalue()
-
-      # If there's a result variable, include it
-      if 'result' in safe_locals:
-          output += f"\nResult: {safe_locals['result']}"
-
-      return output
-
-    finally:
-      sys.stdout = old_stdout
-          
-  except Exception as e:
-      return f"Error executing code: {str(e)}"

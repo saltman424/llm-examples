@@ -1,33 +1,36 @@
 import math
-import sys
-from io import StringIO
+import operator
+import traceback
+import pandas as pd
+import numpy as np
 from RestrictedPython import compile_restricted
-from RestrictedPython.Guards import guarded_iter_unpack_sequence, safe_builtins
-from ...helpers import print_divider
-from ...llm import llm
+from RestrictedPython.Guards import (
+  guarded_iter_unpack_sequence, 
+  safe_builtins,
+  safer_getattr
+)
+from RestrictedPython.PrintCollector import PrintCollector
 from ...state import State
 from .node import Node
 
-class Summarize(Node):
+class ExecutePython(Node):
   def __call__(self, state: State) -> State:
-    """Determines which answer is the best, if any of them."""
-    file_path = state["file_path"]
-    data = state["data"]
-    prompt = state["prompt"]
-    prompt = f"""You are a seasoned data analyst and Python developer helping prepare a report on a given dataset. Your goal is to collect relevant summary statistics from the data for another analyst to use in their report.
-
-You are analyzing: {file_path}.
-
-You 
-    """
-    review = llm.invoke(prompt).content
-    state["summary"] = 
+    """Executes Python code to analyze the data."""
+    python = state["python"]
+    print("‣ Executing Python code to analyze the data...")
+    state = execute(python, state)
+    if "summary" in state:
+      print("‣ Results of Python analysis:")
+      print(state["summary"])
+    elif "python_error" in state:
+      print("‣ Encountered error:")
+      print(state["python_error"])
     return state
   
-def execute(code: str) -> str:
+def execute(code: str, state: State) -> State:
   """
-  Safely execute Python code using RestrictedPython.
-  This prevents dangerous operations like file I/O, network access, imports, etc.
+  Safely execute Python code using RestrictedPython. This prevents dangerous
+  operations like file I/O, network access, imports, etc.
   """
   try:
     # Compile the code with restrictions
@@ -36,15 +39,35 @@ def execute(code: str) -> str:
       filename='<inline>',
       mode='exec'
     )
-    
+
+    df = state["data"].copy()
+    printed = PrintCollector()
+
     # Set up a safe execution environment
-    safe_locals = {}
+    safe_locals = {'printed': printed}
     safe_globals_dict = {
       '__builtins__': safe_builtins,
+      '__builtins__': safe_builtins,
+      '__metaclass__': type,
+      '__name__': 'restricted_module',
+      '_apply_': lambda func, *args, **kwargs: func(*args, **kwargs),
+      '_getattr_': safer_getattr,
+      '_getattr_': safer_getattr,
+      '_getitem_': lambda obj, k: obj[k],
       '_getiter_': guarded_iter_unpack_sequence,
+      '_getiter_': guarded_iter_unpack_sequence,
+      '_iadd_': operator.iadd,
+      '_idiv_': operator.itruediv,
+      '_imul_': operator.imul,
+      '_inplacevar_': _inplacevar,
+      '_isub_': operator.isub,
       '_iter_unpack_sequence_': guarded_iter_unpack_sequence,
-      # Allow safe mathematical operations
-      'math': math,
+      '_iter_unpack_sequence_': guarded_iter_unpack_sequence,
+      '_print_': printed,
+      'data': df,
+      'df': df,
+      'np': np,
+      'pd': pd,
       'math': math,
       'abs': abs,
       'round': round,
@@ -65,26 +88,35 @@ def execute(code: str) -> str:
       'float': float,
       'bool': bool,
     }
-
-    # Capture stdout
-    old_stdout = sys.stdout
-    sys.stdout = captured_output = StringIO()
   
-    try:
-      # Execute the code
-      exec(byte_code, safe_globals_dict, safe_locals)
-
-      # Get the output
-      output = captured_output.getvalue()
-
-      # If there's a result variable, include it
-      if 'result' in safe_locals:
-          output += f"\nResult: {safe_locals['result']}"
-
-      return output
-
-    finally:
-      sys.stdout = old_stdout
-          
+    # Execute the code
+    exec(byte_code, safe_globals_dict, safe_locals)
+    state["summary"] = safe_locals["result"] if "result" in safe_locals else printed.txt
+    return state
+ 
   except Exception as e:
-      return f"Error executing code: {str(e)}"
+    state["python_error"] = f"{str(e)}\n{traceback.format_exc()}"
+    return state
+
+ops = {
+  '+=': operator.iadd,
+  '-=': operator.isub,
+  '*=': operator.imul,
+  '/=': operator.itruediv,
+  '//=': operator.ifloordiv,
+  '%=': operator.imod,
+  '**=': operator.ipow,
+  '&=': operator.iand,
+  '|=': operator.ior,
+  '^=': operator.ixor,
+  '<<=': operator.ilshift,
+  '>>=': operator.irshift,
+}
+def _inplacevar(op_name, x, y):
+  if op_name in ops:
+    return ops[op_name](x, y)
+  # Fallback: try to get the operator by name from operator module
+  op_func = getattr(operator, op_name.strip('_'), None)
+  if op_func:
+    return op_func(x, y)
+  raise ValueError(f"Unknown operator: {op_name}")
